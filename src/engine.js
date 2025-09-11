@@ -114,6 +114,22 @@ export function clearAll() {
 
 export function evaluate(state) {
   if (state.error) return createInitialState();
+  // If percent was applied as a right operand, display already holds final value
+  if (state.rightLabel && state.op) {
+    const val = toNumber(state.display);
+    const formatted = formatNumber(val);
+    const err = formatted === 'Error';
+    return {
+      display: formatted,
+      prev: err ? null : val,
+      op: null,
+      overwrite: true,
+      lastOp: null,
+      lastOperand: null,
+      error: err,
+      rightLabel: null,
+    };
+  }
   // If we have an operator, compute a op b
   if (state.op) {
     const a = state.prev ?? toNumber(state.display);
@@ -178,6 +194,14 @@ export function percent(state) {
 // Provide a preview of the pending evaluation for history purposes
 export function preview(state) {
   if (state.op) {
+    // Percent-adjusted RHS: show label and result as display
+    if (state.rightLabel) {
+      const a = state.prev ?? toNumber(state.display);
+      const res = toNumber(state.display);
+      const str = formatNumber(res);
+      const err = str === 'Error';
+      return { a, b: res, bLabel: state.rightLabel, op: state.op, result: res, resultStr: str, error: err, kind: 'percent' };
+    }
     const a = state.prev ?? toNumber(state.display);
     const b = toNumber(state.display);
     const res = compute(a, b, state.op);

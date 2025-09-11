@@ -105,8 +105,9 @@ export default function Calculator() {
       const p = preview(s)
       const next = evaluate(s)
       if (p) {
+        const bPart = p.bLabel ? p.bLabel : formatNumber(p.b)
         setHistory((h) => [
-          `${formatNumber(p.a)} ${p.op} ${formatNumber(p.b)} = ${next.display}`,
+          `${formatNumber(p.a)} ${p.op} ${bPart} = ${next.display}`,
           ...h,
         ])
       }
