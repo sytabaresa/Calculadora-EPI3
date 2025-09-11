@@ -22,7 +22,7 @@ const ops = [
 ]
 
 const unaryLabels = {
-  square: (x) => `sqr(${x})`,
+  square: (x) => `${x}^2`,      // formato como x^y
   sqrt:   (x) => `√(${x})`,
   recip:  (x) => `1/(${x})`,
   exp:    (x) => `e^(${x})`,
@@ -42,14 +42,21 @@ export default function Calculator() {
   const [showHistory, setShowHistory] = useState(true)
   const [pendingUnary, setPendingUnary] = useState(null) // e.g., 'log'
   const containerRef = useRef(null)
+  const inputRef = useRef(null)
 
   const tapeText = useMemo(() => {
-    const left = state.prev !== null ? state.prev : null
-    const op = state.op
     if (state.error) return 'Error'
-    if (left !== null && op) return `${left} ${op}`
+    const left = state.prev !== null ? formatNumber(state.prev) : null
+    const op = state.op
+    if (left !== null && op) {
+      // Show right label if present (e.g., 90%), otherwise show the typed operand if we are not overwriting
+      let right = null
+      if (state.rightLabel) right = state.rightLabel
+      else if (!state.overwrite) right = state.display
+      return `${left} ${op}${right ? ' ' + right : ''}`
+    }
     return ''
-  }, [state.prev, state.op, state.error])
+  }, [state.prev, state.op, state.error, state.rightLabel, state.overwrite, state.display])
 
   // Update accent based on latest result for a subtle dynamic background
   useEffect(() => {
@@ -61,11 +68,16 @@ export default function Calculator() {
     }
   }, [state.display])
 
+  const toNum = (str) => {
+    const n = Number(str)
+    return Number.isFinite(n) ? n : 0
+  }
+
   const onEqual = useCallback(() => {
     // If a unary function is pending, resolve it and log
     if (pendingUnary) {
       const argStr = state.display
-      const x = Number(argStr)
+      const x = toNum(argStr)
       let y = x
       switch (pendingUnary) {
         case 'square': y = x * x; break
@@ -132,7 +144,7 @@ export default function Calculator() {
   const pickOperator = (op) => {
     if (pendingUnary) {
       const argStr = state.display
-      const x = Number(argStr)
+      const x = toNum(argStr)
       let y = x
       switch (pendingUnary) {
         case 'square': y = x * x; break
@@ -154,6 +166,8 @@ export default function Calculator() {
     setState((s) => setOperator(s, op))
   }
 
+  // display no editable: volvemos al texto simple
+
   return (
     <div className="page">
     <main className={`calc-app ${sci ? 'sci-on' : ''}`} role="application" aria-label="Calculadora estilo iOS" ref={containerRef}>
@@ -173,7 +187,7 @@ export default function Calculator() {
 
       {sci && (
         <section className="scipad" aria-label="Funciones científicas">
-          <button className="key meta" onClick={() => stageUnary('square')}>x²</button>
+          <button className="key meta" onClick={() => stageUnary('square')}>x^2</button>
           <button className="key meta" onClick={() => stageUnary('sqrt')}>√x</button>
           <button className="key meta" onClick={() => stageUnary('recip')}>1/x</button>
           <button className="key meta" onClick={() => setConst(Math.E)}>e</button>

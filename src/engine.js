@@ -9,6 +9,7 @@ export function createInitialState() {
     lastOp: null,
     lastOperand: null,
     error: false,
+    rightLabel: null,
   };
 }
 
@@ -44,19 +45,19 @@ export function compute(a, b, op) {
 export function inputDigit(state, d) {
   if (state.error) return createInitialState();
   if (state.overwrite || state.display === '0') {
-    return { ...state, display: String(d), overwrite: false };
+    return { ...state, display: String(d), overwrite: false, rightLabel: null };
   }
   if (state.display.length >= 16) return state;
-  return { ...state, display: state.display + String(d) };
+  return { ...state, display: state.display + String(d), rightLabel: null };
 }
 
 export function inputDot(state) {
   if (state.error) return createInitialState();
   if (state.overwrite) {
-    return { ...state, display: '0.', overwrite: false };
+    return { ...state, display: '0.', overwrite: false, rightLabel: null };
   }
   if (state.display.includes('.')) return state;
-  return { ...state, display: state.display + '.' };
+  return { ...state, display: state.display + '.', rightLabel: null };
 }
 
 export function setOperator(state, op) {
@@ -76,6 +77,7 @@ export function setOperator(state, op) {
       lastOp: err ? null : state.op,
       lastOperand: err ? null : b,
       error: err,
+      rightLabel: null,
     };
   }
   // Set prev from display and stage operator
@@ -84,6 +86,7 @@ export function setOperator(state, op) {
     prev: toNumber(state.display),
     op,
     overwrite: true,
+    rightLabel: null,
   };
 }
 
@@ -126,6 +129,7 @@ export function evaluate(state) {
       lastOp: err ? null : state.op,
       lastOperand: err ? null : b,
       error: err,
+      rightLabel: null,
     };
   }
   // Repeat last operation if available (pressing = consecutively)
@@ -142,6 +146,7 @@ export function evaluate(state) {
       lastOp: err ? null : state.lastOp,
       lastOperand: err ? null : state.lastOperand,
       error: err,
+      rightLabel: null,
     };
   }
   return state;
@@ -166,6 +171,7 @@ export function percent(state) {
     display: formatted,
     overwrite: true,
     error: err,
+    rightLabel: state.prev != null && state.op ? `${formatNumber(cur)}%` : null,
   };
 }
 
