@@ -9,7 +9,8 @@ export function createInitialState() {
     lastOp: null,
     lastOperand: null,
     error: false,
-    rightLabel: null,
+    rightLabel: null,      // e.g., "90%" when % pressed
+    rightValue: null,      // numeric value for the labeled RHS (e.g., 7.2)
   };
 }
 
@@ -45,19 +46,19 @@ export function compute(a, b, op) {
 export function inputDigit(state, d) {
   if (state.error) return createInitialState();
   if (state.overwrite || state.display === '0') {
-    return { ...state, display: String(d), overwrite: false, rightLabel: null };
+    return { ...state, display: String(d), overwrite: false, rightLabel: null, rightValue: null };
   }
   if (state.display.length >= 16) return state;
-  return { ...state, display: state.display + String(d), rightLabel: null };
+  return { ...state, display: state.display + String(d), rightLabel: null, rightValue: null };
 }
 
 export function inputDot(state) {
   if (state.error) return createInitialState();
   if (state.overwrite) {
-    return { ...state, display: '0.', overwrite: false, rightLabel: null };
+    return { ...state, display: '0.', overwrite: false, rightLabel: null, rightValue: null };
   }
   if (state.display.includes('.')) return state;
-  return { ...state, display: state.display + '.', rightLabel: null };
+  return { ...state, display: state.display + '.', rightLabel: null, rightValue: null };
 }
 
 export function setOperator(state, op) {
@@ -65,7 +66,7 @@ export function setOperator(state, op) {
   // If an operator already set and we're not overwriting, evaluate chaining
   if (state.op && !state.overwrite) {
     const a = state.prev ?? toNumber(state.display);
-    const b = toNumber(state.display);
+    const b = state.rightLabel && state.rightValue != null ? state.rightValue : toNumber(state.display);
     const res = compute(a, b, state.op);
     const formatted = formatNumber(res);
     const err = formatted === 'Error';
@@ -78,15 +79,21 @@ export function setOperator(state, op) {
       lastOperand: err ? null : b,
       error: err,
       rightLabel: null,
+      rightValue: null,
+      
     };
   }
   // Set prev from display and stage operator
   return {
     ...state,
-    prev: toNumber(state.display),
+    prev: state.rightLabel && state.rightValue != null
+      ? state.rightValue
+      : toNumber(state.display),
     op,
     overwrite: true,
     rightLabel: null,
+    rightValue: null,
+    
   };
 }
 
@@ -114,26 +121,10 @@ export function clearAll() {
 
 export function evaluate(state) {
   if (state.error) return createInitialState();
-  // If percent was applied as a right operand, display already holds final value
-  if (state.rightLabel && state.op) {
-    const val = toNumber(state.display);
-    const formatted = formatNumber(val);
-    const err = formatted === 'Error';
-    return {
-      display: formatted,
-      prev: err ? null : val,
-      op: null,
-      overwrite: true,
-      lastOp: null,
-      lastOperand: null,
-      error: err,
-      rightLabel: null,
-    };
-  }
-  // If we have an operator, compute a op b
-  if (state.op) {
+  // '=' with percent and operator: compute full result in one step
+  if (state.op && state.rightLabel) {
     const a = state.prev ?? toNumber(state.display);
-    const b = toNumber(state.display);
+    const b = state.rightValue != null ? state.rightValue : toNumber(state.display);
     const res = compute(a, b, state.op);
     const formatted = formatNumber(res);
     const err = formatted === 'Error';
@@ -146,6 +137,43 @@ export function evaluate(state) {
       lastOperand: err ? null : b,
       error: err,
       rightLabel: null,
+      rightValue: null,
+    };
+  }
+  // '=' with only percent (no operator): just resolve percent to its numeric value
+  if (!state.op && state.rightLabel) {
+    const b = state.rightValue != null ? state.rightValue : toNumber(state.display) / 100;
+    const formatted = formatNumber(b);
+    const err = formatted === 'Error';
+    return {
+      display: formatted,
+      prev: err ? null : b,
+      op: null,
+      overwrite: true,
+      lastOp: null,
+      lastOperand: null,
+      error: err,
+      rightLabel: null,
+      rightValue: null,
+    };
+  }
+  // If we have an operator, compute a op b
+  if (state.op) {
+    const a = state.prev ?? toNumber(state.display);
+    const b = state.rightLabel && state.rightValue != null ? state.rightValue : toNumber(state.display);
+    const res = compute(a, b, state.op);
+    const formatted = formatNumber(res);
+    const err = formatted === 'Error';
+    return {
+      display: formatted,
+      prev: err ? null : res,
+      op: null,
+      overwrite: true,
+      lastOp: err ? null : state.op,
+      lastOperand: err ? null : b,
+      error: err,
+      rightLabel: null,
+      rightValue: null,
     };
   }
   // Repeat last operation if available (pressing = consecutively)
@@ -163,6 +191,7 @@ export function evaluate(state) {
       lastOperand: err ? null : state.lastOperand,
       error: err,
       rightLabel: null,
+      rightValue: null,
     };
   }
   return state;
@@ -175,32 +204,40 @@ export function percent(state) {
   if (state.error) return createInitialState();
   const cur = toNumber(state.display);
   let val;
-  if (state.prev != null && state.op) {
-    val = (state.prev * cur) / 100;
+  if (state.op) {
+    if (state.op === '*' || state.op === '/') {
+      val = cur / 100; // multiply/divide use literal percent (e.g., 90% => 0.9)
+    } else {
+      const base = state.prev != null ? state.prev : toNumber(state.display);
+      val = (base * cur) / 100; // add/sub use percent of the first operand
+    }
   } else {
-    val = cur / 100;
+    val = cur / 100; // standalone percent
   }
   const formatted = formatNumber(val);
   const err = formatted === 'Error';
   return {
     ...state,
-    display: formatted,
+    // Keep display as-is; label indicates % and value is staged
+    display: state.display,
     overwrite: true,
     error: err,
-    rightLabel: state.prev != null && state.op ? `${formatNumber(cur)}%` : null,
+    rightLabel: `${formatNumber(cur)}%`,
+    rightValue: val,
+    
   };
 }
 
 // Provide a preview of the pending evaluation for history purposes
 export function preview(state) {
   if (state.op) {
-    // Percent-adjusted RHS: show label and result as display
+    // Percent-adjusted RHS
     if (state.rightLabel) {
       const a = state.prev ?? toNumber(state.display);
-      const res = toNumber(state.display);
-      const str = formatNumber(res);
+      const b = state.rightValue != null ? state.rightValue : toNumber(state.display);
+      const str = formatNumber(b);
       const err = str === 'Error';
-      return { a, b: res, bLabel: state.rightLabel, op: state.op, result: res, resultStr: str, error: err, kind: 'percent' };
+      return { a, b, bLabel: state.rightLabel, op: state.op, result: b, resultStr: str, error: err, kind: 'percent' };
     }
     const a = state.prev ?? toNumber(state.display);
     const b = toNumber(state.display);
@@ -208,6 +245,13 @@ export function preview(state) {
     const str = formatNumber(res);
     const err = str === 'Error';
     return { a, b, op: state.op, result: res, resultStr: str, error: err, kind: 'binary' };
+  }
+  // Only percent without operator
+  if (state.rightLabel && !state.op) {
+    const b = state.rightValue != null ? state.rightValue : toNumber(state.display) / 100;
+    const str = formatNumber(b);
+    const err = str === 'Error';
+    return { a: null, b, bLabel: state.rightLabel, op: null, result: b, resultStr: str, error: err, kind: 'percentUnary' };
   }
   if (state.lastOp && state.lastOperand != null) {
     const a = toNumber(state.display);

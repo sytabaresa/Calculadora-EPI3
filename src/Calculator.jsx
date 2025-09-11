@@ -74,7 +74,7 @@ export default function Calculator() {
   }
 
   const onEqual = useCallback(() => {
-    // If a unary function is pending, resolve it and log
+    // If a unary function is pending, resolve it and log (pure, no side-effects inside setState)
     if (pendingUnary) {
       const argStr = state.display
       const x = toNum(argStr)
@@ -96,24 +96,30 @@ export default function Calculator() {
         `${unaryLabels[pendingUnary](formatNumber(x))} = ${resStr}`,
         ...h,
       ])
-      setState((s) => ({ ...s, display: resStr, overwrite: true, error: resStr === 'Error' }))
+      setState({ ...state, display: resStr, overwrite: true, error: resStr === 'Error' })
       setPendingUnary(null)
       return
     }
-    // Otherwise, standard binary evaluate with history
-    setState((s) => {
-      const p = preview(s)
-      const next = evaluate(s)
-      if (p) {
+    // Otherwise, standard evaluate
+    const p = preview(state)
+    const next = evaluate(state)
+    if (p) {
+      if (p.kind === 'binary' || p.kind === 'percent') {
         const bPart = p.bLabel ? p.bLabel : formatNumber(p.b)
         setHistory((h) => [
           `${formatNumber(p.a)} ${p.op} ${bPart} = ${next.display}`,
           ...h,
         ])
+      } else if (p.kind === 'percentUnary') {
+        const bPart = p.bLabel || ''
+        setHistory((h) => [
+          `${bPart} = ${next.display}`,
+          ...h,
+        ])
       }
-      return next
-    })
-  }, [pendingUnary, deg, state.display])
+    }
+    setState(next)
+  }, [pendingUnary, deg, state])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -183,7 +189,11 @@ export default function Calculator() {
       </div>
       <section className="display" aria-live="polite">
         <div className="tape" aria-label="expresión previa">{tapeText}</div>
-        <div className="value" aria-label="valor actual">{pendingUnary ? unaryLabels[pendingUnary](state.display) : state.display}</div>
+        <div className="value" aria-label="valor actual">{
+          pendingUnary
+            ? unaryLabels[pendingUnary](state.display)
+            : (state.rightLabel && !state.rightResolved ? state.rightLabel : state.display)
+        }</div>
       </section>
 
       {sci && (
